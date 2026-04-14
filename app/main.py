@@ -1,10 +1,10 @@
-import uuid
-
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
 
+from app.api.files import router as files_router
+from app.api.messages import router as messages_router
+from app.api.admin import router as admin_router
 from app.auth.router import router as auth_router
-from app.observability.logging import configure_logging, new_correlation_id, clear_context
+from app.observability.logging import clear_context, configure_logging, new_correlation_id
 from app.webhooks.slack import router as webhooks_router
 
 configure_logging()
@@ -23,6 +23,9 @@ async def correlation_middleware(request: Request, call_next):
 
 app.include_router(auth_router)
 app.include_router(webhooks_router)
+app.include_router(files_router)
+app.include_router(messages_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")
