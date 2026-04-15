@@ -6,7 +6,7 @@ from app.db import db_session
 from app.execution.jobs.retry_job import handle_job_failure
 from app.execution.rate_limit import handle_rate_limit
 from app.models import ConnectorJob, Integration
-from app.observability.logging import bind_request_context, get_logger
+from app.observability.logging import bind_job_context, bind_request_context, get_logger
 
 
 def run_sync_job(job_id: str) -> None:
@@ -17,11 +17,12 @@ def run_sync_job(job_id: str) -> None:
         if job is None:
             return
 
-        bind_request_context(tenant_id=str(job.tenant_id), job_id=job_id)
+        bind_request_context(tenant_id=str(job.tenant_id))
+        bind_job_context(job_id=job_id, provider=job.provider, job_type="sync")
         job.status = "running"
         db.commit()
 
-        log.info("job_started", job_id=job_id, job_type="sync", provider=job.provider)
+        log.info("job_started")
 
         try:
             integration = db.get(Integration, job.integration_id)
@@ -36,7 +37,7 @@ def run_sync_job(job_id: str) -> None:
 
             job.status = "success"
             db.commit()
-            log.info("job_succeeded", job_id=job_id, result=result)
+            log.info("job_succeeded", result=result)
 
         except RateLimitError as e:
             job.status = "pending"
@@ -44,7 +45,7 @@ def run_sync_job(job_id: str) -> None:
             handle_rate_limit(job, e.retry_after_seconds, db)
 
         except ProviderAuthError as e:
-            log.warning("integration_revoked", job_id=job_id, error=str(e))
+            log.warning("integration_revoked", error=str(e))
             integration = db.get(Integration, job.integration_id)
             if integration:
                 integration.status = "revoked"
@@ -53,5 +54,5 @@ def run_sync_job(job_id: str) -> None:
             db.commit()
 
         except Exception as e:
-            log.error("job_failed", job_id=job_id, error=str(e))
+            log.error("job_failed", error=str(e))
             handle_job_failure(job, e, db)
